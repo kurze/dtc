@@ -98,6 +98,24 @@ func isDir(dir *os.File) bool {
 	return fi.IsDir()
 }
 
+func open(name string) (*os.File, error) {
+	var (
+		f          *os.File
+		err        error
+		nbRedirect uint
+	)
+
+	for nbRedirect = 0; nbRedirect < 10; nbRedirect++ {
+		f, err = os.Open(name)
+		if err == nil {
+			return f, nil
+		}
+		name, err = os.Readlink(name)
+		check(err)
+	}
+	return nil, err
+}
+
 func scanDirByName(dirName string, cOut chan StructFile) {
 	var (
 		isD bool
@@ -105,7 +123,7 @@ func scanDirByName(dirName string, cOut chan StructFile) {
 		err error
 	)
 	sf.Name = dirName
-	sf.File, err = os.Open(dirName)
+	sf.File, err = open(dirName)
 	check(err)
 	isD = isDir(sf.File)
 	if !isD {
@@ -130,7 +148,7 @@ func scanDir(sf StructFile, cOut chan StructFile) {
 	for _, fileName = range fileNames {
 		fileName = sf.Name + "/" + fileName
 		newSf.Name = fileName
-		newSf.File, err = os.Open(fileName)
+		newSf.File, err = open(fileName)
 		check(err)
 		isD = isDir(newSf.File)
 		if isD {
