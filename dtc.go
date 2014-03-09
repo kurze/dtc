@@ -22,37 +22,43 @@ var (
 	w sync.WaitGroup
 )
 
+type StructFile struct {
+	Name string
+	File *os.File
+}
+
 func main() {
 	var (
-		channelFile chan *os.File
+		channelFile chan StructFile
 	)
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	channelFile = make(chan *os.File, 1000)
+	channelFile = make(chan StructFile, 1000)
 
 	readFlag()
 	//connect()
 
-	w.Add(2)
+	w.Add(1)
 	go scanDirByName(dirName, channelFile)
-	go display(channelFile)
 	w.Wait()
+	close(channelFile)
+
+	display(channelFile)
 }
 
-func display(cIn chan *os.File) {
+func display(cIn chan StructFile) {
 	var (
-		err error
-		fi  os.FileInfo
-		f   *os.File
-		ok  bool
+		sf        StructFile
+		notClosed bool
 	)
-	for f, ok = <-cIn; ok; {
-		fi, err = f.Stat()
-		check(err)
-		log.Println(fi.Name())
+	notClosed = true
+
+	//	for f, ok = <-cIn; ok; {
+	for notClosed {
+		sf, notClosed = <-cIn
+		log.Println(sf.Name)
 	}
-	w.Done()
 }
 
 func readFlag() {
@@ -80,66 +86,59 @@ func check(err error) {
 	}
 }
 
-func isDir(dirName string) (bool, *os.File) {
+func isDir(dir *os.File) bool {
 	var (
-		err   error
-		f     *os.File
-		fi    os.FileInfo
-		count int
+		err error
+		fi  os.FileInfo
 	)
 
-	count = 0
-	for count < 10 {
-		f, err = os.Open(dirName)
-		if err != nil {
-			dirName, err = os.Readlink(dirName)
-			check(err)
-		} else {
-			count = 10
-		}
-		count++
-	}
-
-	fi, err = f.Stat()
+	fi, err = dir.Stat()
 	check(err)
 
-	return fi.IsDir(), f
+	return fi.IsDir()
 }
 
-func scanDirByName(dirName string, cOut chan *os.File) {
+func scanDirByName(dirName string, cOut chan StructFile) {
 	var (
 		isD bool
-		f   *os.File
+		sf  StructFile
+		err error
 	)
-	isD, f = isDir(dirName)
+	sf.Name = dirName
+	sf.File, err = os.Open(dirName)
+	check(err)
+	isD = isDir(sf.File)
 	if !isD {
 		panic("not a directory")
 	}
-	scanDir(f, dirName, cOut)
-	w.Done()
+
+	scanDir(sf, cOut)
 }
 
-func scanDir(dir *os.File, dirName string, cOut chan *os.File) {
+func scanDir(sf StructFile, cOut chan StructFile) {
 	var (
 		fileNames []string
 		fileName  string
-		file      *os.File
 		err       error
 		isD       bool
+		newSf     StructFile
 	)
 
-	fileNames, err = dir.Readdirnames(0)
+	fileNames, err = sf.File.Readdirnames(0)
 	check(err)
 
 	for _, fileName = range fileNames {
-		fileName = dirName + "/" + fileName
-		log.Println(fileName)
-		isD, file = isDir(fileName)
+		fileName = sf.Name + "/" + fileName
+		newSf.Name = fileName
+		newSf.File, err = os.Open(fileName)
+		check(err)
+		isD = isDir(newSf.File)
 		if isD {
 			w.Add(1)
-			go scanDir(file, fileName, cOut)
+			go scanDir(newSf, cOut)
+
 		} else {
-			cOut <- file
+			cOut <- newSf
 		}
 	}
 	w.Done()
