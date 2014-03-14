@@ -2,11 +2,13 @@ package main
 
 import (
 	"flag"
+	"io"
 	"labix.org/v2/mgo"
 	"log"
 	"os"
 	"runtime"
 	"sync"
+	"time"
 )
 
 var (
@@ -37,14 +39,16 @@ func main() {
 	channelFile = make(chan StructFile, 1000)
 
 	readFlag()
-	//connect()
+	connect()
 
 	w.Add(1)
 	go scanDirByName(dirName, channelFile)
 	w.Wait()
 	close(channelFile)
 
-	display(channelFile)
+	//	display(channelFile)
+	launchToServer(channelFile)
+	db.Logout()
 }
 
 func display(cIn chan StructFile) {
@@ -169,13 +173,47 @@ func GetGridFile(name string) *mgo.GridFile {
 	)
 
 	result, err = gridFS.Open(name)
+	if err == mgo.ErrNotFound {
+		return nil
+	}
 	check(err)
 
 	return result
 
 }
 
-func GetFile(name string) []byte {
+func SetGridFile(sf StructFile) {
+	var (
+		dbFile *mgo.GridFile
+		err    error
+	)
+	dbFile, err = gridFS.Create(sf.Name)
+	check(err)
+
+	io.Copy(dbFile, sf.File)
+	check(err)
+	err = dbFile.Close()
+	check(err)
+
+}
+
+func DeleteGridFile(sf StructFile) error {
+
+	return gridFS.Remove(sf.Name)
+
+}
+
+func UpdateGridFile(sf StructFile) {
+	var (
+		err error
+	)
+	err = DeleteGridFile(sf)
+	check(err)
+
+	SetGridFile(sf)
+}
+
+func GetFileData(name string) []byte {
 	var (
 		result []byte
 		file   *mgo.GridFile
@@ -188,4 +226,38 @@ func GetFile(name string) []byte {
 	check(err)
 	return result
 
+}
+
+func launchToServer(cIn chan StructFile) {
+	var (
+		err       error
+		sf        StructFile
+		dbF       *mgo.GridFile
+		fi        os.FileInfo
+		notClosed bool
+		dbTime    time.Time
+		fsTime    time.Time
+	)
+
+	for notClosed = true; notClosed; sf, notClosed = <-cIn {
+
+		dbF = GetGridFile(sf.Name)
+		// TODO : if no one is returned
+		if dbF == nil {
+			log.Println("add : " + sf.Name)
+			SetGridFile(sf)
+		} else {
+
+			dbTime = dbF.UploadDate()
+			fi, err = sf.File.Stat()
+			check(err)
+			fsTime = fi.ModTime()
+
+			if fsTime.After(dbTime) {
+				log.Println("update : " + sf.Name)
+				UpdateGridFile(sf)
+			}
+		}
+
+	}
 }
