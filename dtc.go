@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -241,8 +242,9 @@ func launchToServer(cIn chan StructFile) {
 
 	for notClosed = true; notClosed; sf, notClosed = <-cIn {
 
+		sf.Name = strings.Replace(sf.Name, dirName, "", 1)
+
 		dbF = GetGridFile(sf.Name)
-		// TODO : if no one is returned
 		if dbF == nil {
 			log.Println("add : " + sf.Name)
 			SetGridFile(sf)
