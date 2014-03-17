@@ -6,6 +6,7 @@ import (
 	"labix.org/v2/mgo"
 	"log"
 	"os"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -72,6 +73,10 @@ func readFlag() {
 	flag.StringVar(&gridFSName, "gridName", "fs", "name of the gridFS collection")
 	flag.StringVar(&dirName, "dir", ".", "path to dir to send to the db")
 	flag.Parse()
+
+	if ok, _ := regexp.Match("/$", []byte(dirName)); !ok {
+		dirName = dirName + "/"
+	}
 }
 
 func connect() {
@@ -151,7 +156,7 @@ func scanDir(sf StructFile, cOut chan StructFile) {
 	check(err)
 
 	for _, fileName = range fileNames {
-		fileName = sf.Name + "/" + fileName
+		fileName = sf.Name + fileName
 		newSf.Name = fileName
 		newSf.File, err = open(fileName)
 		check(err)
@@ -260,6 +265,5 @@ func launchToServer(cIn chan StructFile) {
 				UpdateGridFile(sf)
 			}
 		}
-
 	}
 }
