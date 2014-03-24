@@ -151,9 +151,12 @@ func scanDir(sf StructFile, cOut chan StructFile) {
 		isD       bool
 		newSf     StructFile
 	)
-
 	fileNames, err = sf.File.Readdirnames(0)
 	check(err)
+
+	if ok, _ := regexp.Match("/$", []byte(sf.Name)); !ok {
+		sf.Name = sf.Name + "/"
+	}
 
 	for _, fileName = range fileNames {
 		fileName = sf.Name + fileName
